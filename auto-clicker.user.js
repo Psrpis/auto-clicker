@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Sayfadaki bir resmi seçerek işaretle. Sonraki sitelerde aynı resmi otomatik tıklar ve sekmeyi kapatır.
+// @version      2.3
+// @description  Sekme aktif olunca otomatik resme tıklar, indirme başlar, sekmeyi kapatır. 50 sekme açık olsa hepsini sırayla yapar.
 // @author       Psrpis
 // @match        *://*/*
 // @grant        GM_setValue
@@ -17,14 +17,16 @@
   const RULE_KEY   = 'rsk_rule';
   const ACTIVE_KEY = 'rsk_active';
   const DELAY_KEY  = 'rsk_delay';
-  const HIDDEN_KEY = 'rsk_hidden';
+  const WAIT_KEY   = 'rsk_wait';
 
   let selectMode = false;
   let highlightEl = null;
   let rule       = GM_getValue(RULE_KEY,   null);
   let active     = GM_getValue(ACTIVE_KEY, false);
   let closeDelay = GM_getValue(DELAY_KEY,  2000);
-  let panelHidden = false;
+  let waitDelay  = GM_getValue(WAIT_KEY,   1500); // sekme açılınca kaç ms bekle
+
+  let alreadyRan = false; // bu sekmede zaten çalıştı mı
 
   /* ── Panel ── */
   const panel = document.createElement('div');
@@ -36,7 +38,6 @@
     borderRadius: '10px', fontFamily: 'system-ui, sans-serif',
     fontSize: '13px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
     userSelect: 'none', overflow: 'hidden',
-    transition: 'width 0.2s, height 0.2s',
   });
 
   panel.innerHTML = `
@@ -51,22 +52,34 @@
       <div id="rsk-status" style="padding:7px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;background:#2a2a2a;color:#aaa;min-height:32px;line-height:1.4;">Henüz resim seçilmedi.</div>
       <div style="display:flex;flex-direction:column;gap:7px;">
         <button id="rsk-btn-select" style="padding:8px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">🎯 Sayfadan Resim Seç</button>
+
         <button id="rsk-btn-toggle" style="padding:8px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:#f0f0f0;cursor:pointer;font-size:12px;font-weight:600;">▶ Oto-Tıklamayı Başlat</button>
+
         <button id="rsk-btn-clear" style="padding:8px;border-radius:6px;border:1px solid #333;background:transparent;color:#888;cursor:pointer;font-size:12px;">✕ Seçimi Sil</button>
       </div>
+
       <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Sekme bekleme süresi (sn)</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input id="rsk-wait" type="range" min="0.5" max="10" step="0.5" value="${waitDelay/1000}" style="flex:1;accent-color:#f59e0b;"/>
+          <span id="rsk-wait-label" style="font-size:12px;min-width:28px;">${waitDelay/1000}s</span>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
         <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Kapatma gecikmesi (sn)</label>
         <div style="display:flex;align-items:center;gap:8px;">
           <input id="rsk-delay" type="range" min="0" max="10" step="0.5" value="${closeDelay/1000}" style="flex:1;accent-color:#3b82f6;"/>
           <span id="rsk-delay-label" style="font-size:12px;min-width:28px;">${closeDelay/1000}s</span>
         </div>
       </div>
-      <div id="rsk-log" style="margin-top:10px;font-size:11px;color:#555;min-height:14px;"></div>
+
+      <div id="rsk-log" style="margin-top:10px;font-size:11px;color:#666;min-height:14px;line-height:1.5;"></div>
     </div>
   `;
   document.documentElement.appendChild(panel);
 
-  /* Küçük "yeniden aç" butonu — panel kapalıyken görünür */
+  /* Yeniden aç butonu */
   const reopenBtn = document.createElement('div');
   Object.assign(reopenBtn.style, {
     position: 'fixed', zIndex: '2147483647',
@@ -81,14 +94,13 @@
   reopenBtn.textContent = '⚡ Auto Clicker';
   document.documentElement.appendChild(reopenBtn);
 
-  /* ── Pozisyon hafızası ── */
   const savedPos = GM_getValue(PANEL_KEY, null);
   if (savedPos) {
     panel.style.top = savedPos.top; panel.style.right = 'auto'; panel.style.left = savedPos.left;
     reopenBtn.style.top = savedPos.top; reopenBtn.style.right = 'auto'; reopenBtn.style.left = savedPos.left;
   }
 
-  /* ── Sürükleme ── */
+  /* Sürükleme */
   let drag = false, ox = 0, oy = 0;
   document.getElementById('rsk-header').addEventListener('mousedown', e => {
     drag = true; ox = e.clientX - panel.getBoundingClientRect().left; oy = e.clientY - panel.getBoundingClientRect().top;
@@ -103,7 +115,7 @@
     if (drag) { GM_setValue(PANEL_KEY, { top: panel.style.top, left: panel.style.left }); drag = false; }
   });
 
-  /* ── Minimize ── */
+  /* Minimize */
   const body = document.getElementById('rsk-body');
   let minimized = false;
   document.getElementById('rsk-minimize').addEventListener('click', () => {
@@ -112,17 +124,20 @@
     document.getElementById('rsk-minimize').textContent = minimized ? '+' : '−';
   });
 
-  /* ── Paneli Kapat / Aç ── */
+  /* Kapat / Aç */
   document.getElementById('rsk-close').addEventListener('click', () => {
-    panel.style.display = 'none';
-    reopenBtn.style.display = 'block';
+    panel.style.display = 'none'; reopenBtn.style.display = 'block';
   });
   reopenBtn.addEventListener('click', () => {
-    reopenBtn.style.display = 'none';
-    panel.style.display = 'block';
+    reopenBtn.style.display = 'none'; panel.style.display = 'block';
   });
 
-  /* ── Gecikme slider ── */
+  /* Sliderlar */
+  document.getElementById('rsk-wait').addEventListener('input', function () {
+    waitDelay = parseFloat(this.value) * 1000;
+    GM_setValue(WAIT_KEY, waitDelay);
+    document.getElementById('rsk-wait-label').textContent = this.value + 's';
+  });
   document.getElementById('rsk-delay').addEventListener('input', function () {
     closeDelay = parseFloat(this.value) * 1000;
     GM_setValue(DELAY_KEY, closeDelay);
@@ -253,37 +268,64 @@
     return bestScore > 0 ? best : null;
   }
 
+  /* ── Ana tıklama + kapatma ── */
   function runAutoClick() {
-    if (!active || !rule) return;
+    if (!active || !rule || alreadyRan) return;
+    alreadyRan = true; // bu sekmede bir kez çalışsın
+
     const img = findBestImage();
-    if (!img) { log('Eşleşen resim bulunamadı.'); return; }
-    log('Resim bulundu, tıklanıyor...');
-    setStatus('<b style="color:#facc15">⚡ Tıklandı!</b>', '#ccc');
+    if (!img) {
+      log('Eşleşen resim bulunamadı.');
+      alreadyRan = false;
+      return;
+    }
+
+    log('Tıklanıyor...');
+    setStatus('<b style="color:#facc15">⚡ Tıklandı! Kapatılıyor...</b>', '#ccc');
+
     img.click();
     img.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    if (closeDelay === 0) { GM_windowClose(); }
-    else { setTimeout(() => GM_windowClose(), closeDelay); }
+
+    setTimeout(() => GM_windowClose(), closeDelay);
   }
 
+  /* ── Sekme aktif olunca otomatik başlat ── */
+  function onFocus() {
+    if (!active || !rule || alreadyRan) return;
+    log(`Sekme aktif, ${waitDelay/1000}s sonra tıklanacak...`);
+    setStatus(`<b style="color:#f59e0b">⏳ ${waitDelay/1000}s bekleniyor...</b>`, '#ccc');
+    setTimeout(runAutoClick, waitDelay);
+  }
+
+  window.addEventListener('focus', onFocus);
+
+  /* Sayfa zaten aktifse ve yeni yüklendiyse de çalış */
+  if (document.hasFocus()) {
+    setTimeout(onFocus, 500);
+  }
+
+  /* ── Butonlar ── */
   document.getElementById('rsk-btn-select').addEventListener('click', () => { if (!selectMode) startSelectMode(); });
 
   document.getElementById('rsk-btn-toggle').addEventListener('click', () => {
     active = !active;
     GM_setValue(ACTIVE_KEY, active);
     updateUI();
-    if (active) { log('Oto-tıklama aktif.'); setTimeout(runAutoClick, 800); }
-    else { log('Durduruldu.'); }
+    if (active) {
+      log('Aktif — sekme açılınca otomatik başlar.');
+      alreadyRan = false;
+      onFocus(); // şu an aktif sekmedeyse hemen başlat
+    } else {
+      log('Durduruldu.');
+    }
   });
 
   document.getElementById('rsk-btn-clear').addEventListener('click', () => {
-    rule = null; active = false;
+    rule = null; active = false; alreadyRan = false;
     GM_setValue(RULE_KEY, null); GM_setValue(ACTIVE_KEY, false);
     updateUI(); log('Seçim silindi.');
   });
 
   updateUI();
-  if (active && rule) {
-    window.addEventListener('load', () => setTimeout(runAutoClick, 1000));
-  }
 
 })();
