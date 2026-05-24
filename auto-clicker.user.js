@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Auto Clicker - Resim Seç ve Kapat
+// @name         Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Sayfadaki bir resmi seçerek işaretle. Sonraki sitelerde aynı resmi otomatik tıklar ve sekmeyi kapatır.
 // @author       Psrpis
 // @match        *://*/*
@@ -17,13 +17,16 @@
   const RULE_KEY   = 'rsk_rule';
   const ACTIVE_KEY = 'rsk_active';
   const DELAY_KEY  = 'rsk_delay';
+  const HIDDEN_KEY = 'rsk_hidden';
 
   let selectMode = false;
   let highlightEl = null;
-  let rule    = GM_getValue(RULE_KEY,   null);
-  let active  = GM_getValue(ACTIVE_KEY, false);
-  let closeDelay = GM_getValue(DELAY_KEY, 2000);
+  let rule       = GM_getValue(RULE_KEY,   null);
+  let active     = GM_getValue(ACTIVE_KEY, false);
+  let closeDelay = GM_getValue(DELAY_KEY,  2000);
+  let panelHidden = false;
 
+  /* ── Panel ── */
   const panel = document.createElement('div');
   panel.id = 'rsk-panel';
   Object.assign(panel.style, {
@@ -33,12 +36,16 @@
     borderRadius: '10px', fontFamily: 'system-ui, sans-serif',
     fontSize: '13px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
     userSelect: 'none', overflow: 'hidden',
+    transition: 'width 0.2s, height 0.2s',
   });
 
   panel.innerHTML = `
     <div id="rsk-header" style="padding:10px 14px;background:#111;cursor:move;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #333;">
       <span style="font-weight:600;font-size:13px;">⚡ Auto Clicker</span>
-      <span id="rsk-minimize" style="cursor:pointer;opacity:.6;font-size:16px;line-height:1;">−</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="rsk-minimize" title="Küçült" style="cursor:pointer;opacity:.6;font-size:16px;line-height:1;">−</span>
+        <span id="rsk-close" title="Paneli Kapat" style="cursor:pointer;opacity:.6;font-size:18px;line-height:1;">×</span>
+      </div>
     </div>
     <div id="rsk-body" style="padding:12px 14px;">
       <div id="rsk-status" style="padding:7px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;background:#2a2a2a;color:#aaa;min-height:32px;line-height:1.4;">Henüz resim seçilmedi.</div>
@@ -59,21 +66,44 @@
   `;
   document.documentElement.appendChild(panel);
 
-  const savedPos = GM_getValue(PANEL_KEY, null);
-  if (savedPos) { panel.style.top = savedPos.top; panel.style.right = 'auto'; panel.style.left = savedPos.left; }
+  /* Küçük "yeniden aç" butonu — panel kapalıyken görünür */
+  const reopenBtn = document.createElement('div');
+  Object.assign(reopenBtn.style, {
+    position: 'fixed', zIndex: '2147483647',
+    top: '20px', right: '20px',
+    background: '#1a1a1a', color: '#f0f0f0',
+    borderRadius: '8px', padding: '7px 12px',
+    fontFamily: 'system-ui, sans-serif', fontSize: '13px',
+    cursor: 'pointer', display: 'none',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+    userSelect: 'none',
+  });
+  reopenBtn.textContent = '⚡ Auto Clicker';
+  document.documentElement.appendChild(reopenBtn);
 
+  /* ── Pozisyon hafızası ── */
+  const savedPos = GM_getValue(PANEL_KEY, null);
+  if (savedPos) {
+    panel.style.top = savedPos.top; panel.style.right = 'auto'; panel.style.left = savedPos.left;
+    reopenBtn.style.top = savedPos.top; reopenBtn.style.right = 'auto'; reopenBtn.style.left = savedPos.left;
+  }
+
+  /* ── Sürükleme ── */
   let drag = false, ox = 0, oy = 0;
   document.getElementById('rsk-header').addEventListener('mousedown', e => {
     drag = true; ox = e.clientX - panel.getBoundingClientRect().left; oy = e.clientY - panel.getBoundingClientRect().top;
   });
   document.addEventListener('mousemove', e => {
     if (!drag) return;
-    panel.style.left = (e.clientX - ox) + 'px'; panel.style.top = (e.clientY - oy) + 'px'; panel.style.right = 'auto';
+    const l = (e.clientX - ox) + 'px', t = (e.clientY - oy) + 'px';
+    panel.style.left = l; panel.style.top = t; panel.style.right = 'auto';
+    reopenBtn.style.left = l; reopenBtn.style.top = t; reopenBtn.style.right = 'auto';
   });
   document.addEventListener('mouseup', () => {
     if (drag) { GM_setValue(PANEL_KEY, { top: panel.style.top, left: panel.style.left }); drag = false; }
   });
 
+  /* ── Minimize ── */
   const body = document.getElementById('rsk-body');
   let minimized = false;
   document.getElementById('rsk-minimize').addEventListener('click', () => {
@@ -82,6 +112,17 @@
     document.getElementById('rsk-minimize').textContent = minimized ? '+' : '−';
   });
 
+  /* ── Paneli Kapat / Aç ── */
+  document.getElementById('rsk-close').addEventListener('click', () => {
+    panel.style.display = 'none';
+    reopenBtn.style.display = 'block';
+  });
+  reopenBtn.addEventListener('click', () => {
+    reopenBtn.style.display = 'none';
+    panel.style.display = 'block';
+  });
+
+  /* ── Gecikme slider ── */
   document.getElementById('rsk-delay').addEventListener('input', function () {
     closeDelay = parseFloat(this.value) * 1000;
     GM_setValue(DELAY_KEY, closeDelay);
@@ -115,6 +156,7 @@
     toggleBtn.style.borderColor = active ? '#16a34a' : '#444';
   }
 
+  /* ── Seçim modu ── */
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed', inset: '0', zIndex: '2147483640',
