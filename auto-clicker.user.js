@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Sekme aktif olunca otomatik resme tıklar, indirme başlar, sekmeyi kapatır.
 // @author       Psrpis
 // @match        *://*/*
@@ -27,17 +27,21 @@
   let waitDelay   = GM_getValue(WAIT_KEY,   1500);
   let alreadyRan  = false;
 
-  /* ── Sekmeyi kapat — tüm yöntemleri sırayla dene ── */
+  /* ── Sekmeyi kapat ── */
   function closeTab() {
     try { GM_windowClose(); } catch(e) {}
     try { window.open('', '_self', ''); window.close(); } catch(e) {}
     try { window.close(); } catch(e) {}
-    /* Son çare: sayfayı boş yap, kullanıcı fark etsin */
+    
+    /* Sayfayı kapatamamışsa, 5 saniye sonra alreadyRan'ı sıfırla 
+       Böylece Ctrl+W ile manuel kapatırsan bir sonraki sekme çalışır */
     setTimeout(() => {
       if (!window.closed) {
-        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;font-size:18px;color:#666;">✔ Tamamlandı — bu sekmeyi kapatabilirsin</div>';
+        alreadyRan = false;
+        log('⚠️ Manuel kapatın (Ctrl+W)');
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;font-size:18px;color:#666;">✔ Tamamlandı — Ctrl+W ile kapatabilirsin</div>';
       }
-    }, 500);
+    }, 5000);
   }
 
   /* ── Panel ── */
