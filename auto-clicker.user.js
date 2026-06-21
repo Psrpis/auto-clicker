@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name         Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      2.5
-// @description  Sekme aktif olunca otomatik resme tıklar, indirme başlar, sekmeyi kapatır.
+// @version      2.6
+// @description  Sekmeye geçince otomatik resme tıklar. Sayfaları sen kapatıyorsun (Ctrl+W).
 // @author       Psrpis
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_windowClose
 // ==/UserScript==
 
 (function () {
@@ -16,33 +15,14 @@
   const PANEL_KEY  = 'rsk_panel_pos';
   const RULE_KEY   = 'rsk_rule';
   const ACTIVE_KEY = 'rsk_active';
-  const DELAY_KEY  = 'rsk_delay';
   const WAIT_KEY   = 'rsk_wait';
 
   let selectMode  = false;
   let highlightEl = null;
   let rule        = GM_getValue(RULE_KEY,   null);
   let active      = GM_getValue(ACTIVE_KEY, false);
-  let closeDelay  = GM_getValue(DELAY_KEY,  2000);
   let waitDelay   = GM_getValue(WAIT_KEY,   1500);
   let alreadyRan  = false;
-
-  /* ── Sekmeyi kapat ── */
-  function closeTab() {
-    try { GM_windowClose(); } catch(e) {}
-    try { window.open('', '_self', ''); window.close(); } catch(e) {}
-    try { window.close(); } catch(e) {}
-    
-    /* Sayfayı kapatamamışsa, 5 saniye sonra alreadyRan'ı sıfırla 
-       Böylece Ctrl+W ile manuel kapatırsan bir sonraki sekme çalışır */
-    setTimeout(() => {
-      if (!window.closed) {
-        alreadyRan = false;
-        log('⚠️ Manuel kapatın (Ctrl+W)');
-        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;font-size:18px;color:#666;">✔ Tamamlandı — Ctrl+W ile kapatabilirsin</div>';
-      }
-    }, 5000);
-  }
 
   /* ── Panel ── */
   const panel = document.createElement('div');
@@ -78,12 +58,8 @@
           <span id="rsk-wait-label" style="font-size:12px;min-width:28px;">${waitDelay/1000}s</span>
         </div>
       </div>
-      <div style="margin-top:10px;">
-        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Kapatma gecikmesi (sn)</label>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input id="rsk-delay" type="range" min="0" max="10" step="0.5" value="${closeDelay/1000}" style="flex:1;accent-color:#3b82f6;"/>
-          <span id="rsk-delay-label" style="font-size:12px;min-width:28px;">${closeDelay/1000}s</span>
-        </div>
+      <div style="margin-top:10px;padding:8px;background:#2a3a2a;border-radius:6px;font-size:11px;color:#8fb88f;border-left:3px solid #4ade80;">
+        💡 Resime tıkla, indirme başlasın, sen <b>Ctrl+W</b> ile kapat. Script bir sonraki sekmeye geçince devam eder.
       </div>
       <div id="rsk-log" style="margin-top:10px;font-size:11px;color:#666;min-height:14px;line-height:1.5;"></div>
     </div>
@@ -141,11 +117,6 @@
     waitDelay = parseFloat(this.value) * 1000;
     GM_setValue(WAIT_KEY, waitDelay);
     document.getElementById('rsk-wait-label').textContent = this.value + 's';
-  });
-  document.getElementById('rsk-delay').addEventListener('input', function () {
-    closeDelay = parseFloat(this.value) * 1000;
-    GM_setValue(DELAY_KEY, closeDelay);
-    document.getElementById('rsk-delay-label').textContent = this.value + 's';
   });
 
   function setStatus(html, color) {
@@ -283,19 +254,17 @@
       return;
     }
 
-    log('Tıklanıyor...');
-    setStatus('<b style="color:#facc15">⚡ Tıklandı! Kapatılıyor...</b>', '#ccc');
+    log('✓ Resme tıklandı — Ctrl+W ile sekmeyi kapat';
+    setStatus('<b style="color:#4ade80">✓ Tıklandı!</b><br>İndirme başladı.', '#4ade80');
 
     img.click();
     img.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    setTimeout(closeTab, closeDelay);
   }
 
   function onFocus() {
     if (!active || !rule || alreadyRan) return;
     log(`${waitDelay/1000}s sonra tıklanacak...`);
-    setStatus(`<b style="color:#f59e0b">⏳ ${waitDelay/1000}s bekleniyor...</b>`, '#ccc');
+    setStatus(`<b style="color:#f59e0b">⏳ ${waitDelay/1000}s bekleniyor...</b>`, '#f59e0b');
     setTimeout(runAutoClick, waitDelay);
   }
 
