@@ -254,7 +254,7 @@
       return;
     }
 
-    log('✓ Resme tıklandı — Ctrl+W ile sekmeyi kapat';
+    log('✓ Resme tıklandı — Ctrl+W ile sekmeyi kapat');
     setStatus('<b style="color:#4ade80">✓ Tıklandı!</b><br>İndirme başladı.', '#4ade80');
 
     img.click();
