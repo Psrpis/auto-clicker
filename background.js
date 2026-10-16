@@ -135,3 +135,34 @@ chrome.tabs.onRemoved.addListener(function (tabId) {
     await save(st);
   });
 });
+
+// ---- Araç çubuğu düğmesi: eklentiyi aç / kapat ----
+// Varsayılan kapalı. Kapalıyken sayfalarda panel görünmez ve hiçbir şey tıklanmaz.
+function applyBadge(enabled) {
+  chrome.action.setBadgeText({ text: enabled ? 'ON' : 'OFF' });
+  chrome.action.setBadgeBackgroundColor({ color: enabled ? '#16a34a' : '#6b7280' });
+  chrome.action.setTitle({
+    title: enabled ? 'Auto Clicker: açık (kapatmak için tıkla)' : 'Auto Clicker: kapalı (açmak için tıkla)'
+  });
+}
+
+function refreshBadge() {
+  chrome.storage.local.get({ rsk_enabled: false }).then(function (s) {
+    applyBadge(!!s.rsk_enabled);
+  });
+}
+
+chrome.runtime.onInstalled.addListener(refreshBadge);
+chrome.runtime.onStartup.addListener(refreshBadge);
+
+chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area === 'local' && changes.rsk_enabled) applyBadge(!!changes.rsk_enabled.newValue);
+});
+
+chrome.action.onClicked.addListener(function () {
+  chrome.storage.local.get({ rsk_enabled: false }).then(function (s) {
+    return chrome.storage.local.set({ rsk_enabled: !s.rsk_enabled });
+  });
+});
+
+refreshBadge();

@@ -1,16 +1,38 @@
 {
   "manifest_version": 3,
   "name": "Auto Clicker",
-  "version": "3.0.0",
-  "description": "Sekmeye geçince seçili resme otomatik tıklar; indirme başlayıp biterse sekmeyi kapatır, başlamazsa açık bırakır.",
+  "version": "3.1.0",
+  "description": "Sekmeye geçince seçili resme otomatik tıklar; indirme başlayıp biterse sekmeyi kapatır. Araç çubuğu simgesiyle açılıp kapanır.",
   "author": "Psrpis",
-  "permissions": ["downloads", "storage"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "downloads",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "action": {
+    "default_title": "Auto Clicker",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

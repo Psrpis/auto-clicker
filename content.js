@@ -3,7 +3,7 @@
 // bittiyse sekmeyi arka plan servisi (background.js) kapatir. Indirme baslamazsa
 // sekme acik kalir.
 
-chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved) {
+chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait', 'rsk_enabled'], function (saved) {
   var cache = saved || {};
   function GM_getValue(k, d) { return cache[k] === undefined ? d : cache[k]; }
   function GM_setValue(k, v) { cache[k] = v; var o = {}; o[k] = v; chrome.storage.local.set(o); }
@@ -21,6 +21,7 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
   var active      = GM_getValue(ACTIVE_KEY, false);
   var waitDelay   = GM_getValue(WAIT_KEY,   1500);
   var alreadyRan  = false;
+  var enabled     = GM_getValue('rsk_enabled', false);
 
   var panel = document.createElement('div');
   panel.id = 'rsk-panel';
@@ -41,6 +42,7 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
   panel.innerHTML = '<div id="rsk-header" style="padding:10px 14px;background:#111;cursor:move;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #333;"><span style="font-weight:600;font-size:13px;">Auto Clicker</span><div style="display:flex;align-items:center;gap:10px;"><span id="rsk-minimize" style="cursor:pointer;opacity:.6;font-size:16px;">−</span><span id="rsk-close" style="cursor:pointer;opacity:.6;font-size:18px;">×</span></div></div><div id="rsk-body" style="padding:12px 14px;"><div id="rsk-status" style="padding:7px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;background:#2a2a2a;color:#aaa;min-height:32px;">Henüz resim seçilmedi.</div><div style="display:flex;flex-direction:column;gap:7px;"><button id="rsk-btn-select" style="padding:8px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Sayfadan Resim Seç</button><button id="rsk-btn-toggle" style="padding:8px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:#f0f0f0;cursor:pointer;font-size:12px;font-weight:600;">Oto-Tıklamayı Başlat</button><button id="rsk-btn-clear" style="padding:8px;border-radius:6px;border:1px solid #333;background:transparent;color:#888;cursor:pointer;font-size:12px;">Seçimi Sil</button></div><div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;"><label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Sekme bekleme süresi (sn)</label><div style="display:flex;align-items:center;gap:8px;"><input id="rsk-wait" type="range" min="0.5" max="10" step="0.5" style="flex:1;accent-color:#f59e0b;"/><span id="rsk-wait-label" style="font-size:12px;min-width:28px;">1.5s</span></div></div><div id="rsk-log" style="margin-top:10px;font-size:11px;color:#666;min-height:14px;"></div></div>';
 
   document.documentElement.appendChild(panel);
+  panel.style.display = enabled ? 'block' : 'none';
 
   var waitSlider = document.getElementById('rsk-wait');
   waitSlider.value = (waitDelay/1000);
@@ -163,7 +165,7 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
   }
 
   function runAutoClick() {
-    if (!active || !rule || alreadyRan) return;
+    if (!enabled || !active || !rule || alreadyRan) return;
     alreadyRan = true;
 
     var img = findBestImage();
@@ -194,7 +196,7 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
   }
 
   function onFocus() {
-    if (!active || !rule || alreadyRan) return;
+    if (!enabled || !active || !rule || alreadyRan) return;
     log('Bekleniyor...');
     setTimeout(runAutoClick, waitDelay);
   }
@@ -224,6 +226,18 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
     updateUI();
   });
 
+  function applyEnabled() {
+    panel.style.display = enabled ? 'block' : 'none';
+    if (!enabled) stopSelectMode();
+  }
+
+  document.getElementById('rsk-close').addEventListener('click', function() {
+    // Kapat = eklentiyi kapat. Tekrar açmak için araç çubuğundaki eklenti simgesine tıkla.
+    enabled = false;
+    GM_setValue('rsk_enabled', false);
+    applyEnabled();
+  });
+
   document.getElementById('rsk-minimize').addEventListener('click', function() {
     var body = document.getElementById('rsk-body');
     body.style.display = body.style.display === 'none' ? 'block' : 'none';
@@ -242,6 +256,11 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== 'local') return;
+    if (changes.rsk_enabled) {
+      enabled = !!changes.rsk_enabled.newValue;
+      cache.rsk_enabled = enabled;
+      applyEnabled();
+    }
     if (changes.rsk_rule) { rule = changes.rsk_rule.newValue || null; cache.rsk_rule = rule; }
     if (changes.rsk_active) { active = !!changes.rsk_active.newValue; cache.rsk_active = active; }
     if (changes.rsk_wait) {
@@ -254,7 +273,7 @@ chrome.storage.local.get(['rsk_rule', 'rsk_active', 'rsk_wait'], function (saved
   });
 
   updateUI();
-  if (active && rule) {
+  if (enabled && active && rule) {
     setTimeout(onFocus, 1000);
   }
 
