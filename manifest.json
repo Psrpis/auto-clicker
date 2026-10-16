@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Clicker",
+  "version": "3.0.0",
+  "description": "Sekmeye geçince seçili resme otomatik tıklar; indirme başlayıp biterse sekmeyi kapatır, başlamazsa açık bırakır.",
+  "author": "Psrpis",
+  "permissions": ["downloads", "storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
